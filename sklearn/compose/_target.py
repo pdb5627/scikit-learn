@@ -5,12 +5,14 @@
 import warnings
 
 import numpy as np
+import pandas as pd
 
 from ..base import BaseEstimator, RegressorMixin, _fit_context, clone
 from ..exceptions import NotFittedError
 from ..preprocessing import FunctionTransformer
 from ..utils import _safe_indexing, check_array
 from ..utils._param_validation import HasMethods
+from ..utils._set_output import _wrap_data_with_container
 from ..utils._tags import _safe_tags
 from ..utils.validation import check_is_fitted
 
@@ -251,6 +253,15 @@ class TransformedTargetRegressor(RegressorMixin, BaseEstimator):
 
         # transform y and convert back to 1d array if needed
         y_trans = self.transformer_.transform(y_2d)
+
+        # Allow transformer to follow set_output API
+        if hasattr(y_original, "to_frame"):
+            y_original = y_original.to_frame()
+        self.transformer_._check_feature_names(y_original, reset=True)
+        y_trans = _wrap_data_with_container("transform", y_trans, y_original, self.transformer_)
+        if hasattr(y_original, "index") and hasattr(y_trans, "index"):
+            y_trans.index = y_original.index
+
         # FIXME: a FunctionTransformer can return a 1D array even when validate
         # is set to True. Therefore, we need to check the number of dimension
         # first.
@@ -294,6 +305,9 @@ class TransformedTargetRegressor(RegressorMixin, BaseEstimator):
         check_is_fitted(self)
         pred = self.regressor_.predict(X, **predict_params)
         if pred.ndim == 1:
+            if hasattr(pred, "to_frame"):
+                pred_trans = self.transformer_.inverse_transform(pred.to_frame())
+            else:
             pred_trans = self.transformer_.inverse_transform(pred.reshape(-1, 1))
         else:
             pred_trans = self.transformer_.inverse_transform(pred)
