@@ -229,6 +229,7 @@ class TransformedTargetRegressor(RegressorMixin, BaseEstimator):
                 f"This {self.__class__.__name__} estimator "
                 "requires y to be passed, but the target y is None."
             )
+        y_original = y
         y = check_array(
             y,
             input_name="y",
@@ -308,7 +309,7 @@ class TransformedTargetRegressor(RegressorMixin, BaseEstimator):
             if hasattr(pred, "to_frame"):
                 pred_trans = self.transformer_.inverse_transform(pred.to_frame())
             else:
-            pred_trans = self.transformer_.inverse_transform(pred.reshape(-1, 1))
+                pred_trans = self.transformer_.inverse_transform(pred.reshape(-1, 1))
         else:
             pred_trans = self.transformer_.inverse_transform(pred)
         if (
