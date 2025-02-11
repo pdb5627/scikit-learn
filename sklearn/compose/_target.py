@@ -4,6 +4,7 @@
 import warnings
 
 import numpy as np
+import pandas as pd
 
 from ..base import BaseEstimator, RegressorMixin, _fit_context, clone
 from ..exceptions import NotFittedError
@@ -18,6 +19,7 @@ from ..utils._metadata_requests import (
 )
 from ..utils._param_validation import HasMethods
 from ..utils._tags import get_tags
+from ..utils._set_output import _wrap_data_with_container
 from ..utils.validation import check_is_fitted
 
 __all__ = ["TransformedTargetRegressor"]
@@ -254,6 +256,7 @@ class TransformedTargetRegressor(RegressorMixin, BaseEstimator):
                 f"This {self.__class__.__name__} estimator "
                 "requires y to be passed, but the target y is None."
             )
+        y_original = y
         y = check_array(
             y,
             input_name="y",
@@ -278,6 +281,15 @@ class TransformedTargetRegressor(RegressorMixin, BaseEstimator):
 
         # transform y and convert back to 1d array if needed
         y_trans = self.transformer_.transform(y_2d)
+
+        # Allow transformer to follow set_output API
+        if hasattr(y_original, "to_frame"):
+            y_original = y_original.to_frame()
+        self.transformer_._check_feature_names(y_original, reset=True)
+        y_trans = _wrap_data_with_container("transform", y_trans, y_original, self.transformer_)
+        if hasattr(y_original, "index") and hasattr(y_trans, "index"):
+            y_trans.index = y_original.index
+
         # FIXME: a FunctionTransformer can return a 1D array even when validate
         # is set to True. Therefore, we need to check the number of dimension
         # first.
@@ -332,7 +344,10 @@ class TransformedTargetRegressor(RegressorMixin, BaseEstimator):
 
         pred = self.regressor_.predict(X, **routed_params.regressor.predict)
         if pred.ndim == 1:
-            pred_trans = self.transformer_.inverse_transform(pred.reshape(-1, 1))
+            if hasattr(pred, "to_frame"):
+                pred_trans = self.transformer_.inverse_transform(pred.to_frame())
+            else:
+                pred_trans = self.transformer_.inverse_transform(pred.reshape(-1, 1))
         else:
             pred_trans = self.transformer_.inverse_transform(pred)
         if (
